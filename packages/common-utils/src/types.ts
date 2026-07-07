@@ -582,6 +582,16 @@ export const scheduleStartAtSchema = z
 
 export const alertNoteSchema = z.string().min(1).max(4096).nullish();
 
+export const AlertSilenceSchema = z.object({
+  by: z.string().optional(),
+  at: z.string(),
+  until: z.string(),
+});
+
+export const AlertSilencedGroupSchema = AlertSilenceSchema.extend({
+  group: z.string(),
+});
+
 export const AlertBaseObjectSchema = z.object({
   id: z.string().optional(),
   interval: AlertIntervalSchema,
@@ -600,13 +610,8 @@ export const AlertBaseObjectSchema = z.object({
   name: z.string().min(1).max(512).nullish(),
   message: z.string().min(1).max(4096).nullish(),
   note: alertNoteSchema,
-  silenced: z
-    .object({
-      by: z.string(),
-      at: z.string(),
-      until: z.string(),
-    })
-    .optional(),
+  silenced: AlertSilenceSchema.optional(),
+  silencedGroups: z.array(AlertSilencedGroupSchema).optional(),
   numConsecutiveWindows: z.number().int().min(1).nullish(),
 });
 
@@ -2120,13 +2125,8 @@ export const AlertsPageItemSchema = z.object({
       name: z.string().optional(),
     })
     .optional(),
-  silenced: z
-    .object({
-      by: z.string(),
-      at: z.string(),
-      until: z.string(),
-    })
-    .optional(),
+  silenced: AlertSilenceSchema.optional(),
+  silencedGroups: z.array(AlertSilencedGroupSchema).optional(),
   executionErrors: z.array(AlertErrorSchema).optional(),
   numConsecutiveWindows: z.number().int().min(1).nullish(),
 });
