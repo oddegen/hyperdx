@@ -50,7 +50,12 @@ import { performance } from 'perf_hooks';
 import { serializeError } from 'serialize-error';
 
 import { ALERT_HISTORY_QUERY_CONCURRENCY } from '@/controllers/alertHistory';
-import { AlertState, IAlert, IAlertError } from '@/models/alert';
+import {
+  AlertState,
+  IAlert,
+  IAlertError,
+  IAlertSilencedGroup,
+} from '@/models/alert';
 import AlertHistory, { IAlertHistory } from '@/models/alertHistory';
 import { IDashboard } from '@/models/dashboard';
 import { ISavedSearch } from '@/models/savedSearch';
@@ -135,6 +140,21 @@ export const alertHasGroupBy = (details: AlertDetails): boolean => {
     return details.tile.config.displayType !== DisplayType.Number;
   }
   return false;
+};
+
+const getActiveSilencedGroup = (
+  silencedGroups: IAlert['silencedGroups'],
+  group: string,
+): IAlertSilencedGroup | undefined => {
+  if (!group) {
+    return undefined;
+  }
+
+  const now = Date.now();
+  return silencedGroups?.find(
+    silencedGroup =>
+      silencedGroup.group === group && silencedGroup.until.getTime() > now,
+  );
 };
 
 /**
@@ -1056,6 +1076,20 @@ export const processAlert = async (
             silenced: alert.silenced,
           },
           'Skipped firing alert due to silence',
+        );
+        return;
+      }
+
+      const silencedGroup = getActiveSilencedGroup(alert.silencedGroups, group);
+      if (silencedGroup) {
+        alertEvaluationsCounter.add(1, { outcome: 'skipped_silenced' });
+        logger.info(
+          {
+            alertId: alert.id,
+            group,
+            silencedGroup,
+          },
+          'Skipped firing alert due to group silence',
         );
         return;
       }
