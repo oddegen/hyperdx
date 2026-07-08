@@ -32,6 +32,17 @@ const router = express.Router();
 
 type EnhancedAlert = NonNullable<Awaited<ReturnType<typeof getAlertEnhanced>>>;
 
+const futureMutedUntilSchema = z
+  .string()
+  .datetime()
+  .refine(val => new Date(val) > new Date(), {
+    message: 'mutedUntil must be in the future',
+  });
+
+const groupSchema = z.string().refine(value => value.trim().length > 0, {
+  message: 'group must not be empty',
+});
+
 const formatAlertResponse = (
   alert: EnhancedAlert,
   history: Omit<IAlertHistory, 'alert'>[],
@@ -45,6 +56,12 @@ const formatAlertResponse = (
           until: alert.silenced.until,
         }
       : undefined,
+    silencedGroups: alert.silencedGroups?.map(groupSilence => ({
+      group: groupSilence.group,
+      by: groupSilence.by?.email,
+      at: groupSilence.at,
+      until: groupSilence.until,
+    })),
     createdBy: alert.createdBy
       ? pick(alert.createdBy, ['email', 'name'])
       : undefined,
@@ -257,15 +274,92 @@ router.put(
 );
 
 router.post(
+  '/:id/group-silenced',
+  validateRequest({
+    body: z.object({
+      group: groupSchema,
+      mutedUntil: futureMutedUntilSchema,
+    }),
+    params: z.object({
+      id: objectIdSchema,
+    }),
+  }),
+  async (req, res, next) => {
+    try {
+      const teamId = req.user?.team;
+      if (teamId == null || req.user == null) {
+        return res.sendStatus(403);
+      }
+
+      const alert = await getAlertById(req.params.id, teamId);
+      if (!alert) {
+        return res.status(404).json({ error: 'Alert not found' });
+      }
+
+      const silencedGroup = {
+        group: req.body.group,
+        by: req.user._id,
+        at: new Date(),
+        until: new Date(req.body.mutedUntil),
+      };
+
+      alert.silencedGroups = [
+        ...(alert.silencedGroups?.filter(
+          groupSilence => groupSilence.group !== req.body.group,
+        ) ?? []),
+        silencedGroup,
+      ];
+      await alert.save();
+
+      res.sendStatus(200);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.delete(
+  '/:id/group-silenced',
+  validateRequest({
+    params: z.object({
+      id: objectIdSchema,
+    }),
+    query: z.object({
+      group: groupSchema,
+    }),
+  }),
+  async (req, res, next) => {
+    try {
+      const teamId = req.user?.team;
+      if (teamId == null) {
+        return res.sendStatus(403);
+      }
+
+      const alert = await getAlertById(req.params.id, teamId);
+      if (!alert) {
+        return res.status(404).json({ error: 'Alert not found' });
+      }
+
+      alert.silencedGroups = alert.silencedGroups?.filter(
+        groupSilence => groupSilence.group !== req.query.group,
+      );
+      if (alert.silencedGroups?.length === 0) {
+        alert.silencedGroups = undefined;
+      }
+      await alert.save();
+
+      res.sendStatus(200);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
   '/:id/silenced',
   validateRequest({
     body: z.object({
-      mutedUntil: z
-        .string()
-        .datetime()
-        .refine(val => new Date(val) > new Date(), {
-          message: 'mutedUntil must be in the future',
-        }),
+      mutedUntil: futureMutedUntilSchema,
     }),
     params: z.object({
       id: objectIdSchema,

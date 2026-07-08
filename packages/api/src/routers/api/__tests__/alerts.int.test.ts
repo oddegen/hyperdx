@@ -538,6 +538,78 @@ describe('alerts router', () => {
     );
   });
 
+  it('can silence one group', async () => {
+    const dashboard = await agent
+      .post('/dashboards')
+      .send(MOCK_DASHBOARD)
+      .expect(200);
+    const alert = await agent
+      .post('/alerts')
+      .send(
+        makeAlertInput({
+          dashboardId: dashboard.body.id,
+          tileId: dashboard.body.tiles[0].id,
+          webhookId: webhook._id.toString(),
+        }),
+      )
+      .expect(200);
+
+    const mutedUntil = new Date(Date.now() + 3600000).toISOString();
+    await agent
+      .post(`/alerts/${alert.body.data._id}/group-silenced`)
+      .send({ group: 'service:web', mutedUntil })
+      .expect(200);
+
+    const alertFromDb = await Alert.findById(alert.body.data._id);
+    expect(alertFromDb?.silencedGroups).toHaveLength(1);
+    expect(alertFromDb?.silencedGroups?.[0]?.group).toBe('service:web');
+    expect(alertFromDb?.silencedGroups?.[0]?.by).toEqual(user._id);
+    expect(new Date(alertFromDb!.silencedGroups![0].until).toISOString()).toBe(
+      mutedUntil,
+    );
+  });
+
+  it('can unsilence one group', async () => {
+    const dashboard = await agent
+      .post('/dashboards')
+      .send(MOCK_DASHBOARD)
+      .expect(200);
+    const alert = await agent
+      .post('/alerts')
+      .send(
+        makeAlertInput({
+          dashboardId: dashboard.body.id,
+          tileId: dashboard.body.tiles[0].id,
+          webhookId: webhook._id.toString(),
+        }),
+      )
+      .expect(200);
+
+    await agent
+      .post(`/alerts/${alert.body.data._id}/group-silenced`)
+      .send({
+        group: 'service:web',
+        mutedUntil: new Date(Date.now() + 3600000).toISOString(),
+      })
+      .expect(200);
+    await agent
+      .post(`/alerts/${alert.body.data._id}/group-silenced`)
+      .send({
+        group: 'service:worker',
+        mutedUntil: new Date(Date.now() + 3600000).toISOString(),
+      })
+      .expect(200);
+
+    await agent
+      .delete(`/alerts/${alert.body.data._id}/group-silenced`)
+      .query({ group: 'service:web' })
+      .expect(200);
+
+    const alertFromDb = await Alert.findById(alert.body.data._id);
+    expect(alertFromDb?.silencedGroups).toHaveLength(1);
+    expect(alertFromDb?.silencedGroups?.[0]?.group).toBe('service:worker');
+  });
+
   it('can unsilence an alert', async () => {
     const dashboard = await agent
       .post('/dashboards')
@@ -607,6 +679,41 @@ describe('alerts router', () => {
     expect(silencedAlert.silenced.until).toBeDefined();
   });
 
+  it('returns silencedGroups info in GET /alerts', async () => {
+    const dashboard = await agent
+      .post('/dashboards')
+      .send(MOCK_DASHBOARD)
+      .expect(200);
+    const alert = await agent
+      .post('/alerts')
+      .send(
+        makeAlertInput({
+          dashboardId: dashboard.body.id,
+          tileId: dashboard.body.tiles[0].id,
+          webhookId: webhook._id.toString(),
+        }),
+      )
+      .expect(200);
+
+    const mutedUntil = new Date(Date.now() + 3600000).toISOString();
+    await agent
+      .post(`/alerts/${alert.body.data._id}/group-silenced`)
+      .send({ group: 'service:web', mutedUntil })
+      .expect(200);
+
+    const alerts = await agent.get('/alerts').expect(200);
+    expect(alerts.body.data.length).toBe(1);
+    const silencedAlert = alerts.body.data[0];
+    expect(silencedAlert.silencedGroups).toEqual([
+      expect.objectContaining({
+        group: 'service:web',
+        by: user.email,
+        until: mutedUntil,
+      }),
+    ]);
+    expect(silencedAlert.silencedGroups[0].at).toBeDefined();
+  });
+
   it('prevents silencing an alert that does not exist', async () => {
     const fakeId = randomMongoId();
     const mutedUntil = new Date(Date.now() + 3600000).toISOString();
@@ -617,10 +724,77 @@ describe('alerts router', () => {
       .expect(404); // Should fail because alert doesn't exist
   });
 
+  it('rejects group silencing with an invalid group', async () => {
+    const dashboard = await agent
+      .post('/dashboards')
+      .send(MOCK_DASHBOARD)
+      .expect(200);
+    const alert = await agent
+      .post('/alerts')
+      .send(
+        makeAlertInput({
+          dashboardId: dashboard.body.id,
+          tileId: dashboard.body.tiles[0].id,
+          webhookId: webhook._id.toString(),
+        }),
+      )
+      .expect(200);
+
+    await agent
+      .post(`/alerts/${alert.body.data._id}/group-silenced`)
+      .send({
+        group: '   ',
+        mutedUntil: new Date(Date.now() + 3600000).toISOString(),
+      })
+      .expect(400);
+  });
+
+  it('rejects group silencing with a past mutedUntil', async () => {
+    const dashboard = await agent
+      .post('/dashboards')
+      .send(MOCK_DASHBOARD)
+      .expect(200);
+    const alert = await agent
+      .post('/alerts')
+      .send(
+        makeAlertInput({
+          dashboardId: dashboard.body.id,
+          tileId: dashboard.body.tiles[0].id,
+          webhookId: webhook._id.toString(),
+        }),
+      )
+      .expect(200);
+
+    await agent
+      .post(`/alerts/${alert.body.data._id}/group-silenced`)
+      .send({
+        group: 'service:web',
+        mutedUntil: new Date(Date.now() - 60000).toISOString(),
+      })
+      .expect(400);
+  });
+
+  it('prevents group silencing an alert that does not exist', async () => {
+    await agent
+      .post(`/alerts/${randomMongoId()}/group-silenced`)
+      .send({
+        group: 'service:web',
+        mutedUntil: new Date(Date.now() + 3600000).toISOString(),
+      })
+      .expect(404);
+  });
+
   it('prevents unsilencing an alert that does not exist', async () => {
     const fakeId = randomMongoId();
 
     await agent.delete(`/alerts/${fakeId}/silenced`).expect(404); // Should fail
+  });
+
+  it('prevents group unsilencing an alert that does not exist', async () => {
+    await agent
+      .delete(`/alerts/${randomMongoId()}/group-silenced`)
+      .query({ group: 'service:web' })
+      .expect(404);
   });
 
   it('allows creating an alert on a raw SQL line tile', async () => {
