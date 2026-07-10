@@ -647,6 +647,15 @@ export const AlertHistorySchema = z.object({
 
 export type AlertHistory = z.infer<typeof AlertHistorySchema>;
 
+export const AlertGroupSummarySchema = z.object({
+  group: z.string(),
+  state: z.nativeEnum(AlertState),
+  history: z.array(AlertHistorySchema),
+  silenced: AlertSilenceSchema.optional(),
+});
+
+export type AlertGroupSummary = z.infer<typeof AlertGroupSummarySchema>;
+
 // A single alert state transition within a time range, used to draw
 // firing/recovery annotations on dashboard charts. Only boundary crossings are
 // emitted: ALERT = fired, OK = recovered.
@@ -2096,6 +2105,7 @@ export const AlertsPageItemSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   history: z.array(AlertHistorySchema),
+  groups: z.array(AlertGroupSummarySchema).optional(),
   dashboard: z
     .object({
       _id: z.string(),

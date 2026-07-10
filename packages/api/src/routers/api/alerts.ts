@@ -12,6 +12,8 @@ import { processRequest, validateRequest } from 'zod-express-middleware';
 
 import {
   getAlertTransitionsInRange,
+  getRecentAlertGroupSummaries,
+  getRecentAlertGroupSummariesBatch,
   getRecentAlertHistories,
   getRecentAlertHistoriesBatch,
 } from '@/controllers/alertHistory';
@@ -31,6 +33,9 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
 const router = express.Router();
 
 type EnhancedAlert = NonNullable<Awaited<ReturnType<typeof getAlertEnhanced>>>;
+type AlertGroupSummary = Awaited<
+  ReturnType<typeof getRecentAlertGroupSummaries>
+>[number];
 
 const futureMutedUntilSchema = z
   .string()
@@ -46,9 +51,30 @@ const groupSchema = z.string().refine(value => value.trim().length > 0, {
 const formatAlertResponse = (
   alert: EnhancedAlert,
   history: Omit<IAlertHistory, 'alert'>[],
+  groups?: AlertGroupSummary[],
 ): PreSerialized<AlertsPageItem> => {
+  const formattedGroups = groups?.map(groupSummary => {
+    const groupSilence = alert.silencedGroups?.find(
+      silencedGroup => silencedGroup.group === groupSummary.group,
+    );
+
+    return {
+      group: groupSummary.group,
+      state: groupSummary.state,
+      history: groupSummary.history,
+      silenced: groupSilence
+        ? {
+            by: groupSilence.by?.email,
+            at: groupSilence.at,
+            until: groupSilence.until,
+          }
+        : undefined,
+    };
+  });
+
   return {
     history,
+    groups: formattedGroups,
     silenced: alert.silenced
       ? {
           by: alert.silenced.by?.email,
@@ -125,10 +151,18 @@ router.get('/', async (req, res: AlertsExpRes, next) => {
       })),
       20,
     );
+    const groupSummaryMap = await getRecentAlertGroupSummariesBatch(
+      alerts.map(alert => ({
+        alertId: new ObjectId(alert._id),
+        interval: alert.interval,
+      })),
+      20,
+    );
 
     const data = alerts.map(alert => {
       const history = historyMap.get(alert._id.toString()) ?? [];
-      return formatAlertResponse(alert, history);
+      const groups = groupSummaryMap.get(alert._id.toString());
+      return formatAlertResponse(alert, history, groups);
     });
 
     sendJson(res, { data });
@@ -162,8 +196,13 @@ router.get(
         interval: alert.interval,
         limit: 20,
       });
+      const groups = await getRecentAlertGroupSummaries({
+        alertId: new ObjectId(alert._id),
+        interval: alert.interval,
+        limit: 20,
+      });
 
-      const data = formatAlertResponse(alert, history);
+      const data = formatAlertResponse(alert, history, groups);
 
       sendJson(res, { data });
     } catch (e) {
