@@ -22,7 +22,7 @@ import type {
   WebhookTestApiResponse,
   WebhookUpdateApiResponse,
 } from '@hyperdx/common-utils/dist/types';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { IS_LOCAL_MODE } from './config';
 import { getLocalDashboardTags } from './dashboard';
@@ -36,6 +36,17 @@ type ServicesResponse = {
       'k8s.pod.uid'?: string;
     }>
   >;
+};
+
+type SilenceAlertGroupVariables = {
+  alertId: string;
+  group: string;
+  mutedUntil: string;
+};
+
+type UnsilenceAlertGroupVariables = {
+  alertId: string;
+  group: string;
 };
 
 function loginHook(request: Request, options: any, response: Response) {
@@ -119,6 +130,42 @@ const api = {
       mutationFn: async (alertId: string) => {
         await server(`alerts/${alertId}/silenced`, {
           method: 'DELETE',
+        });
+      },
+    });
+  },
+  useSilenceAlertGroup() {
+    const queryClient = useQueryClient();
+
+    return useMutation<void, Error, SilenceAlertGroupVariables>({
+      mutationFn: async ({ alertId, group, mutedUntil }) => {
+        await server(`alerts/${alertId}/group-silenced`, {
+          method: 'POST',
+          json: { group, mutedUntil },
+        });
+      },
+      onSuccess: (_data, { alertId }) => {
+        queryClient.invalidateQueries({ queryKey: api.getAlertsQueryKey() });
+        queryClient.invalidateQueries({
+          queryKey: api.getAlertQueryKey(alertId),
+        });
+      },
+    });
+  },
+  useUnsilenceAlertGroup() {
+    const queryClient = useQueryClient();
+
+    return useMutation<void, Error, UnsilenceAlertGroupVariables>({
+      mutationFn: async ({ alertId, group }) => {
+        await server(`alerts/${alertId}/group-silenced`, {
+          method: 'DELETE',
+          searchParams: { group },
+        });
+      },
+      onSuccess: (_data, { alertId }) => {
+        queryClient.invalidateQueries({ queryKey: api.getAlertsQueryKey() });
+        queryClient.invalidateQueries({
+          queryKey: api.getAlertQueryKey(alertId),
         });
       },
     });

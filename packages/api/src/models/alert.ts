@@ -23,7 +23,7 @@ export interface IAlertError {
   message: string;
 }
 
-export interface IAlertSilence {
+interface IAlertSilence {
   by?: ObjectId;
   at: Date;
   until: Date;
