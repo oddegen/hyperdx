@@ -18,6 +18,7 @@ import {
   Group,
   Select,
   Stack,
+  Text,
   TextInput,
   UnstyledButton,
 } from '@mantine/core';
@@ -37,8 +38,11 @@ import {
   IconTableRow,
 } from '@tabler/icons-react';
 
-import { AckAlert } from '@/components/alerts/AckAlert';
-import { AlertHistoryCardList } from '@/components/alerts/AlertHistoryCards';
+import { AckAlert, AckAlertGroup } from '@/components/alerts/AckAlert';
+import {
+  AlertHistoryCardList,
+  AlertHistoryCardStack,
+} from '@/components/alerts/AlertHistoryCards';
 import EmptyState from '@/components/EmptyState';
 import { PageHeader } from '@/components/PageHeader';
 
@@ -119,6 +123,60 @@ function AlertNote({ note }: { note: string }) {
         </div>
       </Collapse>
     </div>
+  );
+}
+
+function AlertStateBadge({ state }: { state?: AlertState }) {
+  switch (state) {
+    case AlertState.ALERT:
+      return (
+        <Badge variant="light" color="red">
+          Alert
+        </Badge>
+      );
+    case AlertState.PENDING:
+      return (
+        <Badge variant="light" color="orange">
+          Pending
+        </Badge>
+      );
+    case AlertState.OK:
+      return <Badge variant="light">Ok</Badge>;
+    case AlertState.DISABLED:
+      return (
+        <Badge variant="light" color="gray">
+          Disabled
+        </Badge>
+      );
+    default:
+      return null;
+  }
+}
+
+function AlertGroupRows({ alert }: { alert: AlertsPageItem }) {
+  if (!alert.groups?.length) return null;
+
+  return (
+    <Stack gap={0} className={styles.alertGroupRows}>
+      {alert.groups.map(group => (
+        <div
+          key={group.group}
+          className={styles.alertGroupRow}
+          data-testid={`alert-group-row-${alert._id}-${group.group}`}
+        >
+          <Group gap="sm" wrap="nowrap">
+            <AlertStateBadge state={group.state} />
+            <Text size="sm" className={styles.alertGroupLabel}>
+              {group.group}
+            </Text>
+          </Group>
+          <Group gap="sm" wrap="nowrap">
+            <AlertHistoryCardStack history={group.history} />
+            <AckAlertGroup alertId={alert._id} group={group} />
+          </Group>
+        </div>
+      ))}
+    </Stack>
   );
 }
 
@@ -207,72 +265,59 @@ function AlertDetails({ alert }: { alert: AlertsPageItem }) {
   }, [alert]);
 
   return (
-    <div data-testid={`alert-card-${alert._id}`} className={styles.alertRow}>
-      <Group>
-        {alert.state === AlertState.ALERT && (
-          <Badge variant="light" color="red">
-            Alert
-          </Badge>
-        )}
-        {alert.state === AlertState.PENDING && (
-          <Badge variant="light" color="orange">
-            Pending
-          </Badge>
-        )}
-        {alert.state === AlertState.OK && <Badge variant="light">Ok</Badge>}
-        {alert.state === AlertState.DISABLED && (
-          <Badge variant="light" color="gray">
-            Disabled
-          </Badge>
-        )}
+    <div data-testid={`alert-card-${alert._id}`} className={styles.alertBlock}>
+      <div className={styles.alertRow}>
+        <Group>
+          <AlertStateBadge state={alert.state} />
 
-        <Stack gap={2}>
-          <div>
-            <Link
-              data-testid={`alert-link-${alert._id}`}
-              href={alertUrl}
-              className={styles.alertLink}
-              title={linkTitle}
-            >
-              <Group gap={2}>
-                {alertIcon}
-                {alertName}
+          <Stack gap={2}>
+            <div>
+              <Link
+                data-testid={`alert-link-${alert._id}`}
+                href={alertUrl}
+                className={styles.alertLink}
+                title={linkTitle}
+              >
+                <Group gap={2}>
+                  {alertIcon}
+                  {alertName}
+                </Group>
+              </Link>
+            </div>
+            <div className="fs-8 d-flex gap-2">
+              {alertType}
+              {notificationMethod}
+              {alert.createdBy && (
+                <>
+                  <span>&middot;</span>
+                  <span>
+                    Created by {alert.createdBy.name || alert.createdBy.email}
+                  </span>
+                </>
+              )}
+            </div>
+            {getAlertTags(alert).length > 0 && (
+              <Group gap={4}>
+                {getAlertTags(alert).map(tag => (
+                  <Badge key={tag} variant="light" color="gray" size="xs">
+                    {tag}
+                  </Badge>
+                ))}
               </Group>
-            </Link>
-          </div>
-          <div className="fs-8 d-flex gap-2">
-            {alertType}
-            {notificationMethod}
-            {alert.createdBy && (
-              <>
-                <span>&middot;</span>
-                <span>
-                  Created by {alert.createdBy.name || alert.createdBy.email}
-                </span>
-              </>
             )}
-          </div>
-          {getAlertTags(alert).length > 0 && (
-            <Group gap={4}>
-              {getAlertTags(alert).map(tag => (
-                <Badge key={tag} variant="light" color="gray" size="xs">
-                  {tag}
-                </Badge>
-              ))}
-            </Group>
-          )}
-          {alert.note && <AlertNote note={alert.note} />}
-        </Stack>
-      </Group>
+            {alert.note && <AlertNote note={alert.note} />}
+          </Stack>
+        </Group>
 
-      <Group>
-        <AlertHistoryCardList alert={alert} alertUrl={alertUrl} />
-        <AckAlert alert={alert} />
-      </Group>
+        <Group>
+          <AlertHistoryCardList alert={alert} alertUrl={alertUrl} />
+          <AckAlert alert={alert} />
+        </Group>
+      </div>
+      <AlertGroupRows alert={alert} />
     </div>
   );
 }
-
 function AlertCardList({ alerts }: { alerts: AlertsPageItem[] }) {
   const alarmAlerts = alerts.filter(alert => alert.state === AlertState.ALERT);
   const pendingAlerts = alerts.filter(
