@@ -16,6 +16,10 @@ const mockSilenceAlert = jest.fn();
 const mockUnsilenceAlert = jest.fn();
 const mockSilenceAlertGroup = jest.fn();
 const mockUnsilenceAlertGroup = jest.fn();
+const mutationOptionsMatcher = expect.objectContaining({
+  onError: expect.any(Function),
+  onSuccess: expect.any(Function),
+});
 
 jest.mock('nuqs', () => ({
   useQueryState: () => React.useState<string | null>(null),
@@ -137,21 +141,19 @@ describe('AlertsPage grouped alerts', () => {
   it('renders group rows under a grouped alert', () => {
     renderAlertsPage();
 
-    expect(
-      screen.getByTestId('alert-group-row-alert-1-ServiceName:app'),
-    ).toHaveTextContent('ServiceName:app');
-    expect(
-      screen.getByTestId('alert-group-row-alert-1-ServiceName:api'),
-    ).toHaveTextContent('ServiceName:api');
+    expect(screen.getByTestId('alert-group-row-alert-1-0')).toHaveTextContent(
+      'ServiceName:app',
+    );
+    expect(screen.getByTestId('alert-group-row-alert-1-1')).toHaveTextContent(
+      'ServiceName:api',
+    );
   });
 
   it('acking a group calls the group-specific mutation payload', async () => {
     const user = userEvent.setup();
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId(
-      'alert-group-row-alert-1-ServiceName:app',
-    );
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-0');
     await user.click(within(groupRow).getByRole('button', { name: 'Ack' }));
     await user.click(await screen.findByText('30 minutes'));
 
@@ -161,7 +163,7 @@ describe('AlertsPage grouped alerts', () => {
         group: 'ServiceName:app',
         mutedUntil: expect.any(String),
       }),
-      expect.anything(),
+      mutationOptionsMatcher,
     );
     expect(mockSilenceAlert).not.toHaveBeenCalled();
   });
@@ -170,9 +172,7 @@ describe('AlertsPage grouped alerts', () => {
     const user = userEvent.setup();
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId(
-      'alert-group-row-alert-1-ServiceName:api',
-    );
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-1');
     await user.click(within(groupRow).getByRole('button', { name: "Ack'd" }));
     await user.click(await screen.findByText('Resume alert'));
 
@@ -181,7 +181,7 @@ describe('AlertsPage grouped alerts', () => {
         alertId: 'alert-1',
         group: 'ServiceName:api',
       },
-      expect.anything(),
+      mutationOptionsMatcher,
     );
     expect(mockUnsilenceAlert).not.toHaveBeenCalled();
   });
@@ -201,7 +201,7 @@ describe('AlertsPage grouped alerts', () => {
         alertId: 'alert-1',
         mutedUntil: expect.any(String),
       }),
-      expect.anything(),
+      mutationOptionsMatcher,
     );
     expect(mockSilenceAlertGroup).not.toHaveBeenCalled();
   });

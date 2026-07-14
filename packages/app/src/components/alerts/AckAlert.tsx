@@ -4,6 +4,7 @@ import { add } from 'date-fns';
 import { Button, Menu } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconBell } from '@tabler/icons-react';
+import type { QueryClient } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 
 import api from '@/api';
@@ -14,6 +15,25 @@ import { isAlertSilenceExpired } from '@/utils/alerts';
 
 type AlertSilence = AlertsPageItem['silenced'];
 type AlertGroup = NonNullable<AlertsPageItem['groups']>[number];
+
+const ACK_DURATIONS: Array<{ label: string; duration: Duration }> = [
+  { label: '30 minutes', duration: { minutes: 30 } },
+  { label: '1 hour', duration: { hours: 1 } },
+  { label: '6 hours', duration: { hours: 6 } },
+  { label: '24 hours', duration: { hours: 24 } },
+];
+
+function getErrorStatus(error: unknown): number | undefined {
+  if (!(error instanceof Error) || !('response' in error)) return undefined;
+
+  const { response } = error;
+  if (!response || typeof response !== 'object' || !('status' in response)) {
+    return undefined;
+  }
+
+  const { status } = response;
+  return typeof status === 'number' ? status : undefined;
+}
 
 function AckMenu({
   isPending,
@@ -97,50 +117,16 @@ function AckMenu({
           <Menu.Label lh="1" py={6}>
             Acknowledge and silence for
           </Menu.Label>
-          <Menu.Item
-            lh="1"
-            py={8}
-            onClick={() =>
-              onSilence({
-                minutes: 30,
-              })
-            }
-          >
-            30 minutes
-          </Menu.Item>
-          <Menu.Item
-            lh="1"
-            py={8}
-            onClick={() =>
-              onSilence({
-                hours: 1,
-              })
-            }
-          >
-            1 hour
-          </Menu.Item>
-          <Menu.Item
-            lh="1"
-            py={8}
-            onClick={() =>
-              onSilence({
-                hours: 6,
-              })
-            }
-          >
-            6 hours
-          </Menu.Item>
-          <Menu.Item
-            lh="1"
-            py={8}
-            onClick={() =>
-              onSilence({
-                hours: 24,
-              })
-            }
-          >
-            24 hours
-          </Menu.Item>
+          {ACK_DURATIONS.map(({ label, duration }) => (
+            <Menu.Item
+              key={label}
+              lh="1"
+              py={8}
+              onClick={() => onSilence(duration)}
+            >
+              {label}
+            </Menu.Item>
+          ))}
         </Menu.Dropdown>
       </Menu>
     );
@@ -154,7 +140,7 @@ function getAckMutationOptions({
   queryClient,
 }: {
   alertId: string;
-  queryClient: ReturnType<typeof useQueryClient>;
+  queryClient: QueryClient;
 }) {
   return {
     onSuccess: () => {
@@ -163,8 +149,8 @@ function getAckMutationOptions({
         queryKey: api.getAlertQueryKey(alertId),
       });
     },
-    onError: (error: any) => {
-      const status = error?.response?.status;
+    onError: (error: unknown) => {
+      const status = getErrorStatus(error);
       let message = 'Failed to silence alert, please try again later.';
 
       if (status === 404) {

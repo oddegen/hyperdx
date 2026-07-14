@@ -18,7 +18,6 @@ import {
   Group,
   Select,
   Stack,
-  Text,
   TextInput,
   UnstyledButton,
 } from '@mantine/core';
@@ -38,11 +37,10 @@ import {
   IconTableRow,
 } from '@tabler/icons-react';
 
-import { AckAlert, AckAlertGroup } from '@/components/alerts/AckAlert';
-import {
-  AlertHistoryCardList,
-  AlertHistoryCardStack,
-} from '@/components/alerts/AlertHistoryCards';
+import { AckAlert } from '@/components/alerts/AckAlert';
+import { AlertGroupRows } from '@/components/alerts/AlertGroupRows';
+import { AlertHistoryCardList } from '@/components/alerts/AlertHistoryCards';
+import { AlertStateBadge } from '@/components/alerts/AlertStateBadge';
 import EmptyState from '@/components/EmptyState';
 import { PageHeader } from '@/components/PageHeader';
 
@@ -123,60 +121,6 @@ function AlertNote({ note }: { note: string }) {
         </div>
       </Collapse>
     </div>
-  );
-}
-
-function AlertStateBadge({ state }: { state?: AlertState }) {
-  switch (state) {
-    case AlertState.ALERT:
-      return (
-        <Badge variant="light" color="red">
-          Alert
-        </Badge>
-      );
-    case AlertState.PENDING:
-      return (
-        <Badge variant="light" color="orange">
-          Pending
-        </Badge>
-      );
-    case AlertState.OK:
-      return <Badge variant="light">Ok</Badge>;
-    case AlertState.DISABLED:
-      return (
-        <Badge variant="light" color="gray">
-          Disabled
-        </Badge>
-      );
-    default:
-      return null;
-  }
-}
-
-function AlertGroupRows({ alert }: { alert: AlertsPageItem }) {
-  if (!alert.groups?.length) return null;
-
-  return (
-    <Stack gap={0} className={styles.alertGroupRows}>
-      {alert.groups.map(group => (
-        <div
-          key={group.group}
-          className={styles.alertGroupRow}
-          data-testid={`alert-group-row-${alert._id}-${group.group}`}
-        >
-          <Group gap="sm" wrap="nowrap">
-            <AlertStateBadge state={group.state} />
-            <Text size="sm" className={styles.alertGroupLabel}>
-              {group.group}
-            </Text>
-          </Group>
-          <Group gap="sm" wrap="nowrap">
-            <AlertHistoryCardStack history={group.history} />
-            <AckAlertGroup alertId={alert._id} group={group} />
-          </Group>
-        </div>
-      ))}
-    </Stack>
   );
 }
 
