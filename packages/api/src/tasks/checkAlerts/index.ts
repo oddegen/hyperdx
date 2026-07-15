@@ -22,6 +22,7 @@ import {
   aliasMapToWithClauses,
   displayTypeSupportsRawSqlAlerts,
   isTimeSeriesDisplayType,
+  splitAndTrimWithBracket,
 } from '@hyperdx/common-utils/dist/core/utils';
 import { timeBucketByGranularity } from '@hyperdx/common-utils/dist/core/utils';
 import {
@@ -793,6 +794,39 @@ export const parseAlertData = (
   return { value, extraFields };
 };
 
+const getGroupByLabel = (groupBy: { valueExpression: string } | string) => {
+  return typeof groupBy === 'string' ? groupBy : groupBy.valueExpression;
+};
+
+export const getConfiguredGroupByLabels = (
+  chartConfig: ChartConfigWithOptDateRange,
+): string[] => {
+  if (!isBuilderChartConfig(chartConfig) || chartConfig.groupBy == null) {
+    return [];
+  }
+
+  if (typeof chartConfig.groupBy === 'string') {
+    return splitAndTrimWithBracket(chartConfig.groupBy);
+  }
+
+  return chartConfig.groupBy.map(getGroupByLabel);
+};
+
+export const buildAlertGroupContext = (
+  extraFields: Array<[string, string]>,
+  groupByLabels: string[],
+) => {
+  const fields = extraFields.map(
+    ([key, value], index) =>
+      [groupByLabels[index] ?? key, value] as [string, string],
+  );
+
+  return {
+    attributes: Object.fromEntries(fields),
+    groupKey: fields.map(([key, value]) => `${key}:${value}`).join(', '),
+  };
+};
+
 export const processAlert = async (
   now: Date,
   details: AlertDetails,
@@ -1187,6 +1221,7 @@ export const processAlert = async (
       logger.error({ alertId: alert.id }, 'Failed to get response metadata');
       return;
     }
+    const groupByLabels = getConfiguredGroupByLabels(chartConfig);
 
     // single_value type (Raw SQL Number charts) returns a single value with no
     // timestamp column, and are assumed to not have groups.
@@ -1324,10 +1359,9 @@ export const processAlert = async (
           continue;
         }
 
-        const groupKey = hasGroupBy
-          ? extraFields.map(([k, v]) => `${k}:${v}`).join(', ')
-          : '';
-        const attributes = hasGroupBy ? Object.fromEntries(extraFields) : {};
+        const { groupKey, attributes } = hasGroupBy
+          ? buildAlertGroupContext(extraFields, groupByLabels)
+          : { groupKey: '', attributes: {} };
 
         const exceeds = doesExceedThreshold(alert, value);
 

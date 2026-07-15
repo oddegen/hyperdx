@@ -38,7 +38,10 @@ import {
 } from '@tabler/icons-react';
 
 import { AckAlert } from '@/components/alerts/AckAlert';
-import { AlertGroupRows } from '@/components/alerts/AlertGroupRows';
+import {
+  AlertGroupRows,
+  getVisibleAlertGroups,
+} from '@/components/alerts/AlertGroupRows';
 import { AlertHistoryCardList } from '@/components/alerts/AlertHistoryCards';
 import { AlertStateBadge } from '@/components/alerts/AlertStateBadge';
 import EmptyState from '@/components/EmptyState';
@@ -125,6 +128,9 @@ function AlertNote({ note }: { note: string }) {
 }
 
 function AlertDetails({ alert }: { alert: AlertsPageItem }) {
+  const [areGroupsExpanded, setAreGroupsExpanded] = React.useState(true);
+  const hasGroups = getVisibleAlertGroups(alert).length > 0;
+
   const alertName = React.useMemo(() => {
     if (alert.source === AlertSource.TILE && alert.dashboard) {
       const tile = alert.dashboard?.tiles.find(
@@ -212,6 +218,28 @@ function AlertDetails({ alert }: { alert: AlertsPageItem }) {
     <div data-testid={`alert-card-${alert._id}`} className={styles.alertBlock}>
       <div className={styles.alertRow}>
         <Group>
+          {hasGroups ? (
+            <UnstyledButton
+              aria-label={
+                areGroupsExpanded
+                  ? 'Collapse alert groups'
+                  : 'Expand alert groups'
+              }
+              className={styles.alertGroupToggle}
+              data-testid={`alert-group-toggle-${alert._id}`}
+              onClick={() => setAreGroupsExpanded(expanded => !expanded)}
+            >
+              <IconChevronDown
+                size={14}
+                style={{
+                  transform: areGroupsExpanded
+                    ? 'rotate(0deg)'
+                    : 'rotate(-90deg)',
+                  transition: 'transform 200ms',
+                }}
+              />
+            </UnstyledButton>
+          ) : null}
           <AlertStateBadge state={alert.state} />
 
           <Stack gap={2}>
@@ -258,7 +286,11 @@ function AlertDetails({ alert }: { alert: AlertsPageItem }) {
           <AckAlert alert={alert} />
         </Group>
       </div>
-      <AlertGroupRows alert={alert} />
+      {hasGroups ? (
+        <Collapse expanded={areGroupsExpanded}>
+          <AlertGroupRows alert={alert} />
+        </Collapse>
+      ) : null}
     </div>
   );
 }

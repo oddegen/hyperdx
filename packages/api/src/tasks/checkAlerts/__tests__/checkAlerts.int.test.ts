@@ -36,7 +36,9 @@ import Webhook, { IWebhook } from '@/models/webhook';
 import * as checkAlert from '@/tasks/checkAlerts';
 import {
   alertHasGroupBy,
+  buildAlertGroupContext,
   doesExceedThreshold,
+  getConfiguredGroupByLabels,
   getConsecutiveWindowHistories,
   getPreviousAlertHistories,
   getScheduledWindowStart,
@@ -1180,6 +1182,70 @@ describe('checkAlerts', () => {
           }),
         ),
       ).toBe(true);
+    });
+  });
+
+  describe('alert group key labels', () => {
+    it('uses configured groupBy labels instead of rendered ClickHouse expression names', () => {
+      const groupByLabels = getConfiguredGroupByLabels({
+        displayType: 'line',
+        groupBy: "ResourceAttributes['process.command_args']",
+      } as any);
+
+      const { groupKey, attributes } = buildAlertGroupContext(
+        [
+          [
+            "arrayElement(ResourceAttributes, 'process.command_args')",
+            'node index.js',
+          ],
+        ],
+        groupByLabels,
+      );
+
+      expect(groupKey).toBe(
+        "ResourceAttributes['process.command_args']:node index.js",
+      );
+      expect(attributes).toEqual({
+        "ResourceAttributes['process.command_args']": 'node index.js',
+      });
+    });
+
+    it('preserves saved-search group labels', () => {
+      const groupByLabels = getConfiguredGroupByLabels({
+        displayType: 'line',
+        groupBy: 'ServiceName',
+      } as any);
+
+      const { groupKey, attributes } = buildAlertGroupContext(
+        [['ServiceName', 'hdx-oss-dev-api']],
+        groupByLabels,
+      );
+
+      expect(groupKey).toBe('ServiceName:hdx-oss-dev-api');
+      expect(attributes).toEqual({ ServiceName: 'hdx-oss-dev-api' });
+    });
+
+    it('preserves multi-column groupBy order', () => {
+      const groupByLabels = getConfiguredGroupByLabels({
+        displayType: 'line',
+        groupBy: "ServiceName, ResourceAttributes['host.name']",
+      } as any);
+
+      const { groupKey, attributes } = buildAlertGroupContext(
+        [
+          ['ServiceName', 'api'],
+          ["arrayElement(ResourceAttributes, 'host.name')", 'host-1'],
+        ],
+        groupByLabels,
+      );
+
+      expect(groupKey).toBe(
+        "ServiceName:api, ResourceAttributes['host.name']:host-1",
+      );
+      expect(attributes).toEqual({
+        ServiceName: 'api',
+        "ResourceAttributes['host.name']": 'host-1',
+      });
     });
   });
 

@@ -69,17 +69,41 @@
   padding: 0 0 8px 34px;
 }
 
+.alertGroupToggle {
+  align-items: center;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+
+  &:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text);
+  }
+}
+
 .alertGroupRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 8px 0;
+  min-width: 0;
+}
+
+.alertGroupMeta {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .alertGroupLabel {
   color: var(--color-text-secondary);
   font-family: var(--mantine-font-family-monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .alertLink {
