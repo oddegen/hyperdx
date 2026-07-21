@@ -33,6 +33,13 @@ export interface IAlertSilencedGroup extends IAlertSilence {
   group: string;
 }
 
+export interface IAlertUnsilencedGroup {
+  group: string;
+  by?: ObjectId;
+  at: Date;
+  parentSilencedAt: Date;
+}
+
 // follow 'ms' pkg formats
 export type AlertInterval =
   | '1m'
@@ -91,6 +98,7 @@ export interface IAlert {
   // Silenced
   silenced?: IAlertSilence;
   silencedGroups?: IAlertSilencedGroup[];
+  unsilencedGroups?: IAlertUnsilencedGroup[];
 
   // Multi-window alerting: fire only after N violations in M consecutive windows
   numConsecutiveWindows?: number | null;
@@ -243,6 +251,32 @@ const AlertSchema = new Schema<IAlert>(
             required: true,
           },
           until: {
+            type: Date,
+            required: true,
+          },
+        },
+      ],
+      required: false,
+      default: undefined,
+    },
+    unsilencedGroups: {
+      type: [
+        {
+          _id: false,
+          group: {
+            type: String,
+            required: true,
+          },
+          by: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: false,
+          },
+          at: {
+            type: Date,
+            required: true,
+          },
+          parentSilencedAt: {
             type: Date,
             required: true,
           },

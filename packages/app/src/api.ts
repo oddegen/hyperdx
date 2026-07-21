@@ -147,6 +147,26 @@ const api = {
       },
     });
   },
+  useResumeAlertGroup() {
+    return useMutation<void, Error, { alertId: string; group: string }>({
+      mutationFn: async ({ alertId, group }) => {
+        await server(`alerts/${alertId}/group-unsilenced`, {
+          method: 'POST',
+          json: { group },
+        });
+      },
+    });
+  },
+  useClearAlertGroupResume() {
+    return useMutation<void, Error, { alertId: string; group: string }>({
+      mutationFn: async ({ alertId, group }) => {
+        await server(`alerts/${alertId}/group-unsilenced`, {
+          method: 'DELETE',
+          searchParams: { group },
+        });
+      },
+    });
+  },
   usePresetDashboardFilters(
     presetDashboard: PresetDashboard,
     sourceId: string,

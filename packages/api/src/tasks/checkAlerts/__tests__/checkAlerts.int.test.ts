@@ -7864,6 +7864,121 @@ describe('checkAlerts', () => {
       expect((await Alert.findById(details.alert.id))!.state).toBe('ALERT');
     });
 
+    it('should fire notifications for resumed groups when alert is silenced', async () => {
+      const {
+        team,
+        webhook,
+        connection,
+        source,
+        savedSearch,
+        teamWebhooksById,
+        clickhouseClient,
+      } = await setupSavedSearchAlertTest();
+
+      const now = new Date('2023-11-16T22:12:00.000Z');
+      const eventMs = new Date('2023-11-16T22:05:00.000Z');
+
+      await bulkInsertLogs([
+        {
+          ServiceName: 'api',
+          Timestamp: eventMs,
+          SeverityText: 'error',
+          Body: 'Oh no! Something went wrong in api!',
+        },
+        {
+          ServiceName: 'api',
+          Timestamp: eventMs,
+          SeverityText: 'error',
+          Body: 'Oh no! Something went wrong in api!',
+        },
+        {
+          ServiceName: 'app',
+          Timestamp: eventMs,
+          SeverityText: 'error',
+          Body: 'Error from app',
+        },
+        {
+          ServiceName: 'app',
+          Timestamp: eventMs,
+          SeverityText: 'error',
+          Body: 'Error from app',
+        },
+      ]);
+
+      const details = await createAlertDetails(
+        team,
+        source,
+        {
+          source: AlertSource.SAVED_SEARCH,
+          channel: {
+            type: 'webhook',
+            webhookId: webhook._id.toString(),
+          },
+          interval: '5m',
+          thresholdType: AlertThresholdType.ABOVE,
+          threshold: 1,
+          savedSearchId: savedSearch.id,
+          groupBy: 'ServiceName',
+        },
+        {
+          taskType: AlertTaskType.SAVED_SEARCH,
+          savedSearch,
+        },
+      );
+
+      const parentSilencedAt = new Date();
+      const alertDoc = await Alert.findById(details.alert.id);
+      alertDoc!.silenced = {
+        at: parentSilencedAt,
+        until: new Date(Date.now() + 3600000),
+      };
+      alertDoc!.unsilencedGroups = [
+        {
+          group: 'ServiceName:app',
+          at: new Date(),
+          parentSilencedAt,
+        },
+      ];
+      await alertDoc!.save();
+
+      details.alert.silenced = alertDoc!.silenced;
+      details.alert.unsilencedGroups = alertDoc!.unsilencedGroups;
+
+      await processAlertAtTime(
+        now,
+        details,
+        clickhouseClient,
+        connection.id,
+        alertProvider,
+        teamWebhooksById,
+      );
+
+      expect(slack.postMessageToWebhook).toHaveBeenCalledTimes(1);
+      expect(slack.postMessageToWebhook).toHaveBeenCalledWith(
+        'https://hooks.slack.com/services/123',
+        expect.objectContaining({
+          blocks: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'section',
+              text: expect.objectContaining({
+                type: 'mrkdwn',
+                text: expect.stringContaining('Group: "ServiceName:app"'),
+              }),
+            }),
+          ]),
+        }),
+      );
+
+      const alertHistories = await AlertHistory.find({
+        alert: details.alert.id,
+      }).sort({ createdAt: 1, group: 1 });
+      expect(alertHistories).toHaveLength(2);
+      expect(alertHistories[0].state).toBe('ALERT');
+      expect(alertHistories[1].state).toBe('ALERT');
+
+      expect((await Alert.findById(details.alert.id))!.state).toBe('ALERT');
+    });
+
     it('SAVED_SEARCH alert with alias in select and where should trigger', async () => {
       const team = await createTeam({ name: 'My Team' });
 

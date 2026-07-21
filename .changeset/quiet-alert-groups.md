@@ -3,4 +3,4 @@
 '@hyperdx/app': patch
 ---
 
-Add per-group alert acknowledgments so grouped alerts can silence notifications for one group without suppressing other groups or changing the aggregate alert state.
+Add per-group alert acknowledgments and group resume overrides so grouped alerts can mute or resume notifications for one group without changing other groups or the aggregate alert state.

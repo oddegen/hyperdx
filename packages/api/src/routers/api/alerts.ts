@@ -57,6 +57,9 @@ const formatAlertResponse = (
     const groupSilence = alert.silencedGroups?.find(
       silencedGroup => silencedGroup.group === groupSummary.group,
     );
+    const groupUnsilence = alert.unsilencedGroups?.find(
+      unsilencedGroup => unsilencedGroup.group === groupSummary.group,
+    );
 
     return {
       group: groupSummary.group,
@@ -67,6 +70,13 @@ const formatAlertResponse = (
             by: groupSilence.by?.email,
             at: groupSilence.at,
             until: groupSilence.until,
+          }
+        : undefined,
+      unsilenced: groupUnsilence
+        ? {
+            by: groupUnsilence.by?.email,
+            at: groupUnsilence.at,
+            parentSilencedAt: groupUnsilence.parentSilencedAt,
           }
         : undefined,
     };
@@ -348,6 +358,107 @@ router.post(
         ) ?? []),
         silencedGroup,
       ];
+      alert.unsilencedGroups = alert.unsilencedGroups?.filter(
+        groupUnsilence => groupUnsilence.group !== req.body.group,
+      );
+      if (alert.unsilencedGroups?.length === 0) {
+        alert.unsilencedGroups = undefined;
+      }
+      await alert.save();
+
+      res.sendStatus(200);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/:id/group-unsilenced',
+  validateRequest({
+    body: z.object({
+      group: groupSchema,
+    }),
+    params: z.object({
+      id: objectIdSchema,
+    }),
+  }),
+  async (req, res, next) => {
+    try {
+      const teamId = req.user?.team;
+      if (teamId == null || req.user == null) {
+        return res.sendStatus(403);
+      }
+
+      const alert = await getAlertById(req.params.id, teamId);
+      if (!alert) {
+        return res.status(404).json({ error: 'Alert not found' });
+      }
+      if (
+        alert.silenced == null ||
+        alert.silenced.until.getTime() <= Date.now()
+      ) {
+        return res.status(400).json({
+          error: 'Alert must have an active acknowledgment',
+        });
+      }
+
+      const unsilencedGroup = {
+        group: req.body.group,
+        by: req.user._id,
+        at: new Date(),
+        parentSilencedAt: alert.silenced.at,
+      };
+
+      alert.silencedGroups = alert.silencedGroups?.filter(
+        groupSilence => groupSilence.group !== req.body.group,
+      );
+      if (alert.silencedGroups?.length === 0) {
+        alert.silencedGroups = undefined;
+      }
+      alert.unsilencedGroups = [
+        ...(alert.unsilencedGroups?.filter(
+          groupUnsilence => groupUnsilence.group !== req.body.group,
+        ) ?? []),
+        unsilencedGroup,
+      ];
+      await alert.save();
+
+      res.sendStatus(200);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.delete(
+  '/:id/group-unsilenced',
+  validateRequest({
+    params: z.object({
+      id: objectIdSchema,
+    }),
+    query: z.object({
+      group: groupSchema,
+    }),
+  }),
+  async (req, res, next) => {
+    try {
+      const teamId = req.user?.team;
+      if (teamId == null) {
+        return res.sendStatus(403);
+      }
+
+      const alert = await getAlertById(req.params.id, teamId);
+      if (!alert) {
+        return res.status(404).json({ error: 'Alert not found' });
+      }
+
+      alert.unsilencedGroups = alert.unsilencedGroups?.filter(
+        groupUnsilence => groupUnsilence.group !== req.query.group,
+      );
+      if (alert.unsilencedGroups?.length === 0) {
+        alert.unsilencedGroups = undefined;
+      }
       await alert.save();
 
       res.sendStatus(200);
@@ -420,6 +531,7 @@ router.post(
         at: new Date(),
         until: new Date(req.body.mutedUntil),
       };
+      alert.unsilencedGroups = undefined;
       await alert.save();
 
       res.sendStatus(200);
@@ -448,6 +560,7 @@ router.delete(
         return res.status(404).json({ error: 'Alert not found' });
       }
       alert.silenced = undefined;
+      alert.unsilencedGroups = undefined;
       await alert.save();
 
       res.sendStatus(200);

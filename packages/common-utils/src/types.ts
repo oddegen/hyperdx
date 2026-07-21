@@ -592,6 +592,13 @@ export const AlertSilencedGroupSchema = AlertSilenceSchema.extend({
   group: z.string(),
 });
 
+export const AlertUnsilencedGroupSchema = z.object({
+  group: z.string(),
+  by: z.string().optional(),
+  at: z.string(),
+  parentSilencedAt: z.string(),
+});
+
 export const AlertBaseObjectSchema = z.object({
   id: z.string().optional(),
   interval: AlertIntervalSchema,
@@ -652,6 +659,7 @@ export const AlertGroupSummarySchema = z.object({
   state: z.nativeEnum(AlertState),
   history: z.array(AlertHistorySchema),
   silenced: AlertSilenceSchema.optional(),
+  unsilenced: AlertUnsilencedGroupSchema.omit({ group: true }).optional(),
 });
 
 export type AlertGroupSummary = z.infer<typeof AlertGroupSummarySchema>;

@@ -56,6 +56,7 @@ import {
   IAlert,
   IAlertError,
   IAlertSilencedGroup,
+  IAlertUnsilencedGroup,
 } from '@/models/alert';
 import AlertHistory, { IAlertHistory } from '@/models/alertHistory';
 import { IDashboard } from '@/models/dashboard';
@@ -146,16 +147,69 @@ export const alertHasGroupBy = (details: AlertDetails): boolean => {
 const getActiveSilencedGroup = (
   silencedGroups: IAlert['silencedGroups'],
   group: string,
+  now: number,
 ): IAlertSilencedGroup | undefined => {
   if (!group) {
     return undefined;
   }
 
-  const now = Date.now();
   return silencedGroups?.find(
     silencedGroup =>
       silencedGroup.group === group && silencedGroup.until.getTime() > now,
   );
+};
+
+const getActiveUnsilencedGroup = (
+  unsilencedGroups: IAlert['unsilencedGroups'],
+  group: string,
+  parentSilenced: IAlert['silenced'],
+  now: number,
+): IAlertUnsilencedGroup | undefined => {
+  if (
+    !group ||
+    parentSilenced == null ||
+    parentSilenced.until.getTime() <= now
+  ) {
+    return undefined;
+  }
+
+  return unsilencedGroups?.find(
+    unsilencedGroup =>
+      unsilencedGroup.group === group &&
+      unsilencedGroup.parentSilencedAt.getTime() ===
+        parentSilenced.at.getTime(),
+  );
+};
+
+export type AlertNotificationSuppression =
+  | { type: 'alert'; silenced: NonNullable<IAlert['silenced']> }
+  | { type: 'group'; silenced: IAlertSilencedGroup };
+
+export const getAlertNotificationSuppression = (
+  alert: Pick<IAlert, 'silenced' | 'silencedGroups' | 'unsilencedGroups'>,
+  group: string,
+  now = Date.now(),
+): AlertNotificationSuppression | undefined => {
+  const unsilencedGroup = getActiveUnsilencedGroup(
+    alert.unsilencedGroups,
+    group,
+    alert.silenced,
+    now,
+  );
+  if (unsilencedGroup) {
+    return undefined;
+  }
+
+  if (alert.silenced && alert.silenced.until.getTime() > now) {
+    return { type: 'alert', silenced: alert.silenced };
+  }
+
+  const silencedGroup = getActiveSilencedGroup(
+    alert.silencedGroups,
+    group,
+    now,
+  );
+  return silencedGroup ? { type: 'group', silenced: silencedGroup } : undefined;
 };
 
 /**
@@ -1102,26 +1156,30 @@ export const processAlert = async (
       // execution may still send a notification. Subsequent alert checks will
       // respect the silenced state. This trade-off maintains architectural
       // separation from direct database access.
-      if ((alert.silenced?.until?.getTime() ?? 0) > Date.now()) {
+      const notificationSuppression = getAlertNotificationSuppression(
+        alert,
+        group,
+      );
+
+      if (notificationSuppression?.type === 'alert') {
         alertEvaluationsCounter.add(1, { outcome: 'skipped_silenced' });
         logger.info(
           {
             alertId: alert.id,
-            silenced: alert.silenced,
+            silenced: notificationSuppression.silenced,
           },
           'Skipped firing alert due to silence',
         );
         return;
       }
 
-      const silencedGroup = getActiveSilencedGroup(alert.silencedGroups, group);
-      if (silencedGroup) {
+      if (notificationSuppression?.type === 'group') {
         alertEvaluationsCounter.add(1, { outcome: 'skipped_silenced' });
         logger.info(
           {
             alertId: alert.id,
             group,
-            silencedGroup,
+            silencedGroup: notificationSuppression.silenced,
           },
           'Skipped firing alert due to group silence',
         );

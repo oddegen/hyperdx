@@ -93,6 +93,12 @@
   min-width: 0;
 }
 
+.alertGroupRowInheritedMuted {
+  .alertGroupMeta {
+    opacity: 0.58;
+  }
+}
+
 .alertGroupMeta {
   flex: 1 1 auto;
   min-width: 0;

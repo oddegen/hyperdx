@@ -11,11 +11,14 @@ import userEvent from '@testing-library/user-event';
 import AlertsPage from '@/AlertsPage';
 import api from '@/api';
 import type { AlertsPageItem } from '@/types';
+import { truncateMiddle } from '@/utils';
 
 const mockSilenceAlert = jest.fn();
 const mockUnsilenceAlert = jest.fn();
 const mockSilenceAlertGroup = jest.fn();
 const mockUnsilenceAlertGroup = jest.fn();
+const mockResumeAlertGroup = jest.fn();
+const mockClearAlertGroupResume = jest.fn();
 const mutationOptionsMatcher = expect.objectContaining({
   onError: expect.any(Function),
   onSuccess: expect.any(Function),
@@ -51,6 +54,14 @@ jest.mock('@/api', () => ({
     useUnsilenceAlertGroup: () => ({
       isPending: false,
       mutate: mockUnsilenceAlertGroup,
+    }),
+    useResumeAlertGroup: () => ({
+      isPending: false,
+      mutate: mockResumeAlertGroup,
+    }),
+    useClearAlertGroupResume: () => ({
+      isPending: false,
+      mutate: mockClearAlertGroupResume,
     }),
   },
 }));
@@ -136,18 +147,19 @@ describe('AlertsPage grouped alerts', () => {
     mockUnsilenceAlert.mockClear();
     mockSilenceAlertGroup.mockClear();
     mockUnsilenceAlertGroup.mockClear();
+    mockResumeAlertGroup.mockClear();
+    mockClearAlertGroupResume.mockClear();
   });
 
-  it('renders group rows matching the alert state', () => {
+  it('renders group rows in their matching status sections', () => {
     renderAlertsPage();
 
-    expect(screen.getByTestId('alert-group-row-alert-1-0')).toHaveTextContent(
-      'ServiceName:app',
-    );
     expect(
-      screen.queryByTestId('alert-group-row-alert-1-1'),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText('ServiceName:api')).not.toBeInTheDocument();
+      screen.getByTestId('alert-group-row-alert-1-ALERT-0'),
+    ).toHaveTextContent('ServiceName:app');
+    expect(
+      screen.getByTestId('alert-group-row-alert-1-OK-0'),
+    ).toHaveTextContent('ServiceName:api');
   });
 
   it('renders OK group rows for an OK alert', () => {
@@ -173,17 +185,17 @@ describe('AlertsPage grouped alerts', () => {
 
     renderAlertsPage();
 
-    expect(screen.getByTestId('alert-group-row-alert-1-0')).toHaveTextContent(
-      'ServiceName:api',
-    );
+    expect(
+      screen.getByTestId('alert-group-row-alert-1-OK-0'),
+    ).toHaveTextContent('ServiceName:api');
   });
 
   it('collapses and expands group rows under a grouped alert', async () => {
     const user = userEvent.setup();
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId('alert-group-row-alert-1-0');
-    const toggle = screen.getByTestId('alert-group-toggle-alert-1');
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-ALERT-0');
+    const toggle = screen.getByTestId('alert-group-toggle-alert-1-ALERT');
 
     expect(groupRow).toBeVisible();
 
@@ -198,7 +210,7 @@ describe('AlertsPage grouped alerts', () => {
     const user = userEvent.setup();
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId('alert-group-row-alert-1-0');
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-ALERT-0');
     await user.click(within(groupRow).getByRole('button', { name: 'Ack' }));
     await user.click(await screen.findByText('30 minutes'));
 
@@ -237,8 +249,15 @@ describe('AlertsPage grouped alerts', () => {
 
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId('alert-group-row-alert-1-0');
-    expect(groupRow).toHaveTextContent(
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-ALERT-0');
+    const displayGroup =
+      'ResourceAttributes[\'process.command_args\']:["node","./src/index.ts"]';
+
+    expect(groupRow).toHaveTextContent(truncateMiddle(displayGroup, 35));
+    expect(
+      within(groupRow).getByTitle(rawGroup, { exact: true }),
+    ).toBeInTheDocument();
+    expect(groupRow).not.toHaveTextContent(
       'ResourceAttributes[\'process.command_args\']:["node","./src/index.ts"]',
     );
 
@@ -282,7 +301,7 @@ describe('AlertsPage grouped alerts', () => {
 
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId('alert-group-row-alert-1-0');
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-ALERT-0');
     await user.click(within(groupRow).getByRole('button', { name: "Ack'd" }));
     await user.click(await screen.findByText('Resume alert'));
 
@@ -300,7 +319,7 @@ describe('AlertsPage grouped alerts', () => {
     const user = userEvent.setup();
     renderAlertsPage();
 
-    const alertCard = screen.getByTestId('alert-card-alert-1');
+    const alertCard = screen.getByTestId('alert-card-alert-1-ALERT');
     await user.click(
       within(alertCard).getAllByRole('button', { name: 'Ack' })[0],
     );
@@ -316,7 +335,7 @@ describe('AlertsPage grouped alerts', () => {
     expect(mockSilenceAlertGroup).not.toHaveBeenCalled();
   });
 
-  it('shows parent ack as effective for alerting group rows while preserving group ack metadata', async () => {
+  it('shows group ack as effective for touched alerting group rows while preserving parent ack metadata', async () => {
     const user = userEvent.setup();
     jest.mocked(api.useAlerts).mockReturnValue({
       data: {
@@ -348,12 +367,57 @@ describe('AlertsPage grouped alerts', () => {
 
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId('alert-group-row-alert-1-0');
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-ALERT-0');
     await user.click(within(groupRow).getByRole('button', { name: "Ack'd" }));
 
-    expect(await screen.findByText('parent@example.com')).toBeInTheDocument();
-    expect(screen.getByText(/Group acknowledgment/)).toBeInTheDocument();
-    expect(screen.getByText('group@example.com')).toBeInTheDocument();
+    expect(await screen.findByText('group@example.com')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Parent alert acknowledgment also exists/),
+    ).toBeInTheDocument();
+    expect(screen.getByText('parent@example.com')).toBeInTheDocument();
+  });
+
+  it('shows inherited parent ack as the effective group state and can resume only that group', async () => {
+    const user = userEvent.setup();
+    jest.mocked(api.useAlerts).mockReturnValue({
+      data: {
+        data: [
+          makeAlert({
+            silenced: {
+              by: 'parent@example.com',
+              at: '2024-01-01T00:00:00.000Z',
+              until: '2099-01-01T00:00:00.000Z',
+            },
+            groups: [
+              {
+                group: 'ServiceName:app',
+                state: AlertState.ALERT,
+                history: [alertHistory],
+              },
+            ],
+          }),
+        ],
+      },
+      isError: false,
+      isLoading: false,
+    } as ReturnType<typeof api.useAlerts>);
+
+    renderAlertsPage();
+
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-ALERT-0');
+
+    await user.click(within(groupRow).getByRole('button', { name: 'Muted' }));
+    expect(await screen.findByText('Muted by parent ack.')).toBeInTheDocument();
+    await user.click(screen.getByText('Resume group'));
+
+    expect(mockResumeAlertGroup).toHaveBeenCalledWith(
+      {
+        alertId: 'alert-1',
+        group: 'ServiceName:app',
+      },
+      mutationOptionsMatcher,
+    );
+    expect(mockUnsilenceAlert).not.toHaveBeenCalled();
   });
 
   it('does not show parent ack as effective for OK group rows', () => {
@@ -384,9 +448,9 @@ describe('AlertsPage grouped alerts', () => {
 
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId('alert-group-row-alert-1-0');
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-OK-0');
     expect(
-      within(groupRow).queryByRole('button', { name: "Ack'd" }),
+      within(groupRow).queryByRole('button', { name: 'Muted' }),
     ).not.toBeInTheDocument();
   });
 
@@ -424,14 +488,14 @@ describe('AlertsPage grouped alerts', () => {
 
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId('alert-group-row-alert-1-0');
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-OK-0');
     await user.click(within(groupRow).getByRole('button', { name: "Ack'd" }));
 
     expect(await screen.findByText('group@example.com')).toBeInTheDocument();
     expect(screen.queryByText('parent@example.com')).not.toBeInTheDocument();
   });
 
-  it('resuming a group while parent ack is active calls the whole-alert unsilence mutation', async () => {
+  it('resuming an explicitly acked group while parent ack is active creates a group resume override', async () => {
     const user = userEvent.setup();
     jest.mocked(api.useAlerts).mockReturnValue({
       data: {
@@ -463,14 +527,63 @@ describe('AlertsPage grouped alerts', () => {
 
     renderAlertsPage();
 
-    const groupRow = screen.getByTestId('alert-group-row-alert-1-0');
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-ALERT-0');
     await user.click(within(groupRow).getByRole('button', { name: "Ack'd" }));
-    await user.click(await screen.findByText('Resume alert'));
+    await user.click(await screen.findByText('Resume group'));
 
-    expect(mockUnsilenceAlert).toHaveBeenCalledWith(
-      'alert-1',
+    expect(mockResumeAlertGroup).toHaveBeenCalledWith(
+      {
+        alertId: 'alert-1',
+        group: 'ServiceName:app',
+      },
       mutationOptionsMatcher,
     );
-    expect(mockUnsilenceAlertGroup).not.toHaveBeenCalled();
+    expect(mockUnsilenceAlert).not.toHaveBeenCalled();
+  });
+
+  it('can return an explicitly resumed group to the parent acknowledgment', async () => {
+    const user = userEvent.setup();
+    const parentSilencedAt = '2024-01-01T00:00:00.000Z';
+    jest.mocked(api.useAlerts).mockReturnValue({
+      data: {
+        data: [
+          makeAlert({
+            silenced: {
+              by: 'parent@example.com',
+              at: parentSilencedAt,
+              until: '2099-01-01T00:00:00.000Z',
+            },
+            groups: [
+              {
+                group: 'ServiceName:app',
+                state: AlertState.ALERT,
+                history: [alertHistory],
+                unsilenced: {
+                  by: 'group@example.com',
+                  at: '2024-01-02T00:00:00.000Z',
+                  parentSilencedAt,
+                },
+              },
+            ],
+          }),
+        ],
+      },
+      isError: false,
+      isLoading: false,
+    } as ReturnType<typeof api.useAlerts>);
+
+    renderAlertsPage();
+
+    const groupRow = screen.getByTestId('alert-group-row-alert-1-ALERT-0');
+    await user.click(within(groupRow).getByRole('button', { name: 'Ack' }));
+    await user.click(await screen.findByText('Use parent ack'));
+
+    expect(mockClearAlertGroupResume).toHaveBeenCalledWith(
+      {
+        alertId: 'alert-1',
+        group: 'ServiceName:app',
+      },
+      mutationOptionsMatcher,
+    );
   });
 });

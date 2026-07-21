@@ -303,12 +303,18 @@ export const getAlertsEnhanced = async (teamId: ObjectId) => {
         by?: IUser;
       }
     >;
+    unsilencedGroups?: Array<
+      Omit<NonNullable<IAlert['unsilencedGroups']>[number], 'by'> & {
+        by?: IUser;
+      }
+    >;
   }>([
     'savedSearch',
     'dashboard',
     'createdBy',
     'silenced.by',
     'silencedGroups.by',
+    'unsilencedGroups.by',
   ]);
 };
 
@@ -328,12 +334,18 @@ export const getAlertEnhanced = async (
         by?: IUser;
       }
     >;
+    unsilencedGroups?: Array<
+      Omit<NonNullable<IAlert['unsilencedGroups']>[number], 'by'> & {
+        by?: IUser;
+      }
+    >;
   }>([
     'savedSearch',
     'dashboard',
     'createdBy',
     'silenced.by',
     'silencedGroups.by',
+    'unsilencedGroups.by',
   ]);
 };
 
